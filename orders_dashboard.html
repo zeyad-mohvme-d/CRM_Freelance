@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orders Dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #f4f5f7;
+    margin: 0;
+    padding: 16px;
+    color: #1a1a1a;
+  }
+  h1 {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+  .order-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+  .order-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .order-ref {
+    font-weight: bold;
+    font-size: 15px;
+  }
+  .status-badge {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: #fff3cd;
+    color: #856404;
+  }
+  .status-badge.approved { background: #d4edda; color: #155724; }
+  .status-badge.delivered { background: #d1ecf1; color: #0c5460; }
+  .order-detail {
+    font-size: 14px;
+    color: #444;
+    margin: 4px 0;
+  }
+  .order-detail b { color: #111; }
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  button {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-approve { background: #28a745; color: white; }
+  .btn-delivered { background: #17a2b8; color: white; }
+  .btn-approve:disabled, .btn-delivered:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+  #loading, #empty {
+    text-align: center;
+    color: #888;
+    padding: 40px 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>📦 Your Orders</h1>
+<div id="loading">Loading orders...</div>
+<div id="empty" style="display:none;">No orders right now.</div>
+<div id="orders"></div>
+
+<script>
+// This reads the ?rep=1 part of the URL so each rep only sees their own region
+const params = new URLSearchParams(window.location.search);
+const repId = params.get('rep');
+
+// !!! Replace these two URLs with your actual n8n webhook URLs !!!
+const GET_ORDERS_URL = 'https://primary-production-da7ac.up.railway.app/webhook/get-orders';
+const UPDATE_ORDER_URL = 'https://primary-production-da7ac.up.railway.app/webhook/update-order';
+
+async function loadOrders() {
+  const loadingEl = document.getElementById('loading');
+  const emptyEl = document.getElementById('empty');
+  const ordersEl = document.getElementById('orders');
+
+  try {
+    const res = await fetch(`${GET_ORDERS_URL}?rep=${repId}`);
+    const orders = await res.json();
+
+    loadingEl.style.display = 'none';
+
+    if (!orders || orders.length === 0) {
+      emptyEl.style.display = 'block';
+      return;
+    }
+
+    ordersEl.innerHTML = orders.map(order => renderOrderCard(order)).join('');
+  } catch (err) {
+    loadingEl.textContent = 'Failed to load orders. Please refresh.';
+    console.error(err);
+  }
+}
+
+function renderOrderCard(order) {
+  const status = (order.Status || 'pending').toLowerCase();
+  const statusClass = status === 'approved' ? 'approved' : status === 'delivered' ? 'delivered' : '';
+
+  return `
+    <div class="order-card">
+      <div class="order-header">
+        <span class="order-ref">${order.ReferenceNumber || ''}</span>
+        <span class="status-badge ${statusClass}">${order.Status || 'Pending'}</span>
+      </div>
+      <div class="order-detail"><b>Name:</b> ${order['الاسم'] || order.Name || ''}</div>
+      <div class="order-detail"><b>Phone:</b> ${order['الجوال (أرقام انجليزية):'] || order.Phone || ''}</div>
+      <div class="order-detail"><b>Details:</b> ${order['تفاصيل الطلب:'] || order.Details || ''}</div>
+      <div class="btn-row">
+        <button class="btn-approve" onclick="updateOrder('${order.ReferenceNumber}', 'Approved', this)" ${status === 'approved' || status === 'delivered' ? 'disabled' : ''}>
+          Approve
+        </button>
+        <button class="btn-delivered" onclick="updateOrder('${order.ReferenceNumber}', 'Delivered', this)" ${status === 'delivered' ? 'disabled' : ''}>
+          Delivered
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function updateOrder(refNumber, newStatus, buttonEl) {
+  buttonEl.disabled = true;
+  buttonEl.textContent = 'Updating...';
+
+  try {
+    await fetch(UPDATE_ORDER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ referenceNumber: refNumber, status: newStatus })
+    });
+    loadOrders(); // refresh the list to show updated status
+  } catch (err) {
+    alert('Failed to update. Please try again.');
+    buttonEl.disabled = false;
+  }
+}
+
+loadOrders();
+// Auto-refresh every 30 seconds so new orders show up without manual reload
+setInterval(loadOrders, 30000);
+</script>
+
+</body>
+</html>
