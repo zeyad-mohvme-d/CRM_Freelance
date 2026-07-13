@@ -77,73 +77,73 @@
 </style>
 </head>
 <body>
-
+ 
 <h1>📦 Your Orders</h1>
 <div id="loading">Loading orders...</div>
 <div id="empty" style="display:none;">No orders right now.</div>
 <div id="orders"></div>
-
+ 
 <script>
 // This reads the ?rep=1 part of the URL so each rep only sees their own region
 const params = new URLSearchParams(window.location.search);
 const repId = params.get('rep');
-
+ 
 // !!! Replace these two URLs with your actual n8n webhook URLs !!!
 const GET_ORDERS_URL = 'https://primary-production-da7ac.up.railway.app/webhook/get-orders';
 const UPDATE_ORDER_URL = 'https://primary-production-da7ac.up.railway.app/webhook/update-order';
-
+ 
 async function loadOrders() {
   const loadingEl = document.getElementById('loading');
   const emptyEl = document.getElementById('empty');
   const ordersEl = document.getElementById('orders');
-
+ 
   try {
     const res = await fetch(`${GET_ORDERS_URL}?rep=${repId}`);
     const orders = await res.json();
-
+ 
     loadingEl.style.display = 'none';
-
+ 
     if (!orders || orders.length === 0) {
       emptyEl.style.display = 'block';
       return;
     }
-
+ 
     ordersEl.innerHTML = orders.map(order => renderOrderCard(order)).join('');
   } catch (err) {
     loadingEl.textContent = 'Failed to load orders. Please refresh.';
     console.error(err);
   }
 }
-
+ 
 function renderOrderCard(order) {
-  const status = (order.Status || 'pending').toLowerCase();
+  const status = (order['الحالة'] || 'pending').toLowerCase();
   const statusClass = status === 'approved' ? 'approved' : status === 'delivered' ? 'delivered' : '';
-
+ 
   return `
     <div class="order-card">
       <div class="order-header">
-        <span class="order-ref">${order.ReferenceNumber || ''}</span>
-        <span class="status-badge ${statusClass}">${order.Status || 'Pending'}</span>
+        <span class="order-ref">${order['رقم المرجع'] || ''}</span>
+        <span class="status-badge ${statusClass}">${order['الحالة'] || 'Pending'}</span>
       </div>
-      <div class="order-detail"><b>Name:</b> ${order['الاسم'] || order.Name || ''}</div>
-      <div class="order-detail"><b>Phone:</b> ${order['الجوال (أرقام انجليزية):'] || order.Phone || ''}</div>
-      <div class="order-detail"><b>Details:</b> ${order['تفاصيل الطلب:'] || order.Details || ''}</div>
+      <div class="order-detail"><b>Name:</b> ${order['الأسم'] || ''}</div>
+      <div class="order-detail"><b>Phone:</b> ${order['رقم الهاتف'] || ''}</div>
+      <div class="order-detail"><b>Details:</b> ${order['الأوردر'] || ''}</div>
       <div class="btn-row">
-        <button class="btn-approve" onclick="updateOrder('${order.ReferenceNumber}', 'Approved', this)" ${status === 'approved' || status === 'delivered' ? 'disabled' : ''}>
+        <button class="btn-approve" onclick="updateOrder('${order['رقم المرجع']}', 'Approved', this)" ${status === 'approved' || status === 'delivered' ? 'disabled' : ''}>
           Approve
         </button>
-        <button class="btn-delivered" onclick="updateOrder('${order.ReferenceNumber}', 'Delivered', this)" ${status === 'delivered' ? 'disabled' : ''}>
+        <button class="btn-delivered" onclick="updateOrder('${order['رقم المرجع']}', 'Delivered', this)" ${status === 'delivered' ? 'disabled' : ''}>
           Delivered
         </button>
       </div>
     </div>
   `;
 }
-
+ 
 async function updateOrder(refNumber, newStatus, buttonEl) {
   buttonEl.disabled = true;
   buttonEl.textContent = 'Updating...';
-
+ 
   try {
     await fetch(UPDATE_ORDER_URL, {
       method: 'POST',
@@ -156,11 +156,11 @@ async function updateOrder(refNumber, newStatus, buttonEl) {
     buttonEl.disabled = false;
   }
 }
-
+ 
 loadOrders();
 // Auto-refresh every 30 seconds so new orders show up without manual reload
 setInterval(loadOrders, 30000);
 </script>
-
+ 
 </body>
 </html>
