@@ -1,9 +1,9 @@
-<!DOCTYPE html>
-<html lang="en" dir="ltr">
+!DOCTYPE html>
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Orders Dashboard</title>
+<title>الطلبات</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -13,10 +13,7 @@
     padding: 16px;
     color: #1a1a1a;
   }
-  h1 {
-    font-size: 20px;
-    margin-bottom: 16px;
-  }
+  h1 { font-size: 20px; margin-bottom: 16px; }
   .order-card {
     background: white;
     border-radius: 12px;
@@ -28,138 +25,235 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
-  .order-ref {
-    font-weight: bold;
-    font-size: 15px;
-  }
+  .order-ref { font-weight: bold; font-size: 15px; }
   .status-badge {
-    font-size: 12px;
-    padding: 4px 10px;
-    border-radius: 20px;
-    background: #fff3cd;
-    color: #856404;
+    font-size: 12px; padding: 4px 10px; border-radius: 20px;
+    background: #fff3cd; color: #856404;
   }
   .status-badge.approved { background: #d4edda; color: #155724; }
   .status-badge.delivered { background: #d1ecf1; color: #0c5460; }
-  .order-detail {
-    font-size: 14px;
-    color: #444;
-    margin: 4px 0;
-  }
+  .status-badge.cancelled { background: #f8d7da; color: #721c24; }
+  .order-detail { font-size: 14px; color: #444; margin: 4px 0; }
   .order-detail b { color: #111; }
-  .btn-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
+  .item-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 8px 0; border-bottom: 1px solid #eee;
   }
-  button {
-    flex: 1;
-    padding: 12px;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
+  .item-name { flex: 1; font-size: 14px; }
+  .item-qty { color: #888; font-size: 13px; margin: 0 6px; }
+  .item-price-input {
+    width: 90px; padding: 6px; border: 1px solid #ccc;
+    border-radius: 6px; font-size: 14px; text-align: center;
   }
-  .btn-approve { background: #28a745; color: white; }
-  .btn-delivered { background: #17a2b8; color: white; }
-  .btn-approve:disabled, .btn-delivered:disabled {
-    background: #ccc;
-    cursor: not-allowed;
+  .item-price-display { font-weight: 600; min-width: 70px; text-align: left; }
+  .remove-btn {
+    background: #f8d7da; color: #721c24; border: none;
+    border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px;
   }
-  #loading, #empty {
-    text-align: center;
-    color: #888;
-    padding: 40px 0;
+  .total-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 12px; padding-top: 10px; border-top: 2px solid #eee;
+    font-size: 16px; font-weight: bold;
   }
+  .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+  button.action {
+    flex: 1; padding: 12px; border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 600; cursor: pointer; color: white;
+  }
+  .btn-approve { background: #28a745; }
+  .btn-delivered { background: #17a2b8; }
+  .btn-cancel { background: #dc3545; }
+  .btn-save { background: #007bff; }
+  button.action:disabled { background: #ccc; cursor: not-allowed; }
+  #loading, #empty { text-align: center; color: #888; padding: 40px 0; }
 </style>
 </head>
 <body>
  
-<h1>📦 Your Orders</h1>
-<div id="loading">Loading orders...</div>
-<div id="empty" style="display:none;">No orders right now.</div>
+<h1 id="pageTitle">الطلبات</h1>
+<div id="loading">جاري التحميل...</div>
+<div id="empty" style="display:none;">لا توجد طلبات حالياً.</div>
 <div id="orders"></div>
  
 <script>
-// This reads the ?rep=1 part of the URL so each rep only sees their own region
+// ===== CONFIG: replace with your real n8n webhook URLs =====
+const BASE = 'https://primary-production-da7ac.up.railway.app/webhook';
+const GET_ORDERS_URL   = BASE + '/get-orders';      // rep mode: ?rep=N
+const GET_ONE_URL      = BASE + '/get-order';        // customer mode: ?ref=ORD-x
+const UPDATE_ORDER_URL = BASE + '/update-order';     // status updates
+const SAVE_PRICES_URL  = BASE + '/save-prices';      // rep saves item prices
+// ===========================================================
+ 
 const params = new URLSearchParams(window.location.search);
 const repId = params.get('rep');
+const refId = params.get('ref');
+const MODE = refId ? 'customer' : 'rep';   // ref present => customer view
  
-// !!! Replace these two URLs with your actual n8n webhook URLs !!!
-const GET_ORDERS_URL = 'https://primary-production-da7ac.up.railway.app/webhook/get-orders';
-const UPDATE_ORDER_URL = 'https://primary-production-da7ac.up.railway.app/webhook/update-order';
+// keep working copies of each order's items in memory
+const orderItems = {};
  
-async function loadOrders() {
+async function load() {
   const loadingEl = document.getElementById('loading');
   const emptyEl = document.getElementById('empty');
   const ordersEl = document.getElementById('orders');
+  document.getElementById('pageTitle').textContent =
+    MODE === 'customer' ? '🛒 مراجعة طلبك' : '📦 طلباتك';
  
   try {
-    const res = await fetch(`${GET_ORDERS_URL}?rep=${repId}`);
-    const orders = await res.json();
- 
-    loadingEl.style.display = 'none';
- 
-    if (!orders || orders.length === 0) {
-      emptyEl.style.display = 'block';
-      return;
+    let orders;
+    if (MODE === 'customer') {
+      const res = await fetch(`${GET_ONE_URL}?ref=${encodeURIComponent(refId)}`);
+      orders = await res.json();
+    } else {
+      const res = await fetch(`${GET_ORDERS_URL}?rep=${encodeURIComponent(repId)}`);
+      orders = await res.json();
     }
  
-    ordersEl.innerHTML = orders.map(order => renderOrderCard(order)).join('');
+    loadingEl.style.display = 'none';
+    if (!orders || orders.length === 0) { emptyEl.style.display = 'block'; return; }
+ 
+    ordersEl.innerHTML = orders.map(o => renderCard(o)).join('');
   } catch (err) {
-    loadingEl.textContent = 'Failed to load orders. Please refresh.';
+    loadingEl.textContent = 'فشل التحميل. حاول تحديث الصفحة.';
     console.error(err);
   }
 }
  
-function renderOrderCard(order) {
+function parseItems(order) {
+  try { return JSON.parse(order['المنتجات'] || '[]'); }
+  catch { return []; }
+}
+ 
+function renderCard(order) {
+  const ref = order['رقم المرجع'] || '';
   const status = (order['الحالة'] || 'pending').toLowerCase();
-  const statusClass = status === 'approved' ? 'approved' : status === 'delivered' ? 'delivered' : '';
+  const statusClass = status === 'approved' ? 'approved'
+    : status === 'delivered' ? 'delivered'
+    : status === 'cancelled' ? 'cancelled' : '';
+ 
+  const items = parseItems(order);
+  orderItems[ref] = items;
+ 
+  const itemsHtml = items.map((it, idx) => renderItemRow(ref, it, idx)).join('');
+  const total = items.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+  const deliveryFee = 10; // fixed delivery fee
  
   return `
-    <div class="order-card">
+    <div class="order-card" id="card-${ref}">
       <div class="order-header">
-        <span class="order-ref">${order['رقم المرجع'] || ''}</span>
-        <span class="status-badge ${statusClass}">${order['الحالة'] || 'Pending'}</span>
+        <span class="order-ref">${ref}</span>
+        <span class="status-badge ${statusClass}">${order['الحالة'] || 'قيد الانتظار'}</span>
       </div>
-      <div class="order-detail"><b>Name:</b> ${order['الأسم'] || ''}</div>
-      <div class="order-detail"><b>Phone:</b> ${order['رقم الهاتف'] || ''}</div>
-      <div class="order-detail"><b>Details:</b> ${order['الأوردر'] || ''}</div>
-      <div class="btn-row">
-        <button class="btn-approve" onclick="updateOrder('${order['رقم المرجع']}', 'Approved', this)" ${status === 'approved' || status === 'delivered' ? 'disabled' : ''}>
-          Approve
-        </button>
-        <button class="btn-delivered" onclick="updateOrder('${order['رقم المرجع']}', 'Delivered', this)" ${status === 'delivered' ? 'disabled' : ''}>
-          Delivered
-        </button>
+      <div class="order-detail"><b>الاسم:</b> ${order['الأسم'] ?? ''}</div>
+      <div class="order-detail"><b>الهاتف:</b> ${order['رقم الهاتف'] ?? ''}</div>
+      <div style="margin-top:10px;">${itemsHtml}</div>
+      <div class="order-detail" style="margin-top:8px;"><b>التوصيل:</b> ${deliveryFee} ريال</div>
+      <div class="total-row">
+        <span>الإجمالي</span>
+        <span id="total-${ref}">${total + deliveryFee} ريال</span>
       </div>
+      <div class="btn-row">${renderButtons(ref, status)}</div>
     </div>
   `;
 }
  
-async function updateOrder(refNumber, newStatus, buttonEl) {
-  buttonEl.disabled = true;
-  buttonEl.textContent = 'Updating...';
+function renderItemRow(ref, item, idx) {
+  const qty = Number(item.quantity) || 1;
+  if (MODE === 'rep') {
+    // rep enters a price per item
+    return `
+      <div class="item-row">
+        <span class="item-name">${item.item} <span class="item-qty">×${qty}</span></span>
+        <input class="item-price-input" type="number" min="0" placeholder="السعر"
+          value="${item.price || ''}"
+          oninput="onPriceInput('${ref}', ${idx}, this.value)">
+      </div>`;
+  } else {
+    // customer sees price, can remove the item
+    const lineTotal = (Number(item.price) || 0) * qty;
+    return `
+      <div class="item-row" id="item-${ref}-${idx}">
+        <span class="item-name">${item.item} <span class="item-qty">×${qty}</span></span>
+        <span class="item-price-display">${lineTotal} ريال</span>
+        <button class="remove-btn" onclick="removeItem('${ref}', ${idx})">حذف</button>
+      </div>`;
+  }
+}
  
+function renderButtons(ref, status) {
+  if (MODE === 'rep') {
+    return `
+      <button class="action btn-save" onclick="savePrices('${ref}', this)">حفظ الأسعار وإرسالها للعميل</button>
+      <button class="action btn-delivered" onclick="updateStatus('${ref}','Delivered',this)"
+        ${status === 'delivered' ? 'disabled' : ''}>تم التوصيل</button>`;
+  } else {
+    const done = status === 'approved' || status === 'cancelled' || status === 'delivered';
+    return `
+      <button class="action btn-approve" onclick="updateStatus('${ref}','Approved',this)" ${done ? 'disabled' : ''}>موافقة</button>
+      <button class="action btn-cancel" onclick="updateStatus('${ref}','Cancelled',this)" ${done ? 'disabled' : ''}>إلغاء</button>`;
+  }
+}
+ 
+// ---- rep: live price input ----
+function onPriceInput(ref, idx, value) {
+  orderItems[ref][idx].price = Number(value) || 0;
+  recalcTotal(ref);
+}
+ 
+function recalcTotal(ref) {
+  const items = orderItems[ref];
+  const sum = items.reduce((s, it) => s + (Number(it.price)||0) * (Number(it.quantity)||1), 0);
+  document.getElementById('total-' + ref).textContent = (sum + 10) + ' ريال';
+}
+ 
+// ---- customer: remove an item ----
+function removeItem(ref, idx) {
+  orderItems[ref].splice(idx, 1);
+  // re-render just this card by reloading everything (simple + safe)
+  const items = orderItems[ref];
+  const container = document.getElementById('card-' + ref);
+  // rebuild item rows
+  const itemsHtml = items.map((it, i) => renderItemRow(ref, it, i)).join('');
+  container.querySelector('div[style*="margin-top:10px"]').innerHTML = itemsHtml;
+  recalcTotal(ref);
+}
+ 
+// ---- rep saves prices, triggers customer WhatsApp link ----
+async function savePrices(ref, btn) {
+  btn.disabled = true; btn.textContent = 'جاري الحفظ...';
+  try {
+    await fetch(SAVE_PRICES_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ referenceNumber: ref, items: orderItems[ref] })
+    });
+    btn.textContent = 'تم الإرسال ✓';
+  } catch (err) {
+    alert('فشل الحفظ. حاول مرة أخرى.');
+    btn.disabled = false; btn.textContent = 'حفظ الأسعار وإرسالها للعميل';
+  }
+}
+ 
+// ---- shared: status update (approve/deliver/cancel) ----
+async function updateStatus(ref, newStatus, btn) {
+  btn.disabled = true; btn.textContent = 'جاري التحديث...';
   try {
     await fetch(UPDATE_ORDER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ referenceNumber: refNumber, status: newStatus })
+      body: JSON.stringify({ referenceNumber: ref, status: newStatus, items: orderItems[ref] })
     });
-    loadOrders(); // refresh the list to show updated status
+    load();
   } catch (err) {
-    alert('Failed to update. Please try again.');
-    buttonEl.disabled = false;
+    alert('فشل التحديث. حاول مرة أخرى.');
+    btn.disabled = false;
   }
 }
  
-loadOrders();
-// Auto-refresh every 30 seconds so new orders show up without manual reload
-setInterval(loadOrders, 30000);
+load();
+if (MODE === 'rep') setInterval(load, 30000); // rep view auto-refreshes
 </script>
  
 </body>
