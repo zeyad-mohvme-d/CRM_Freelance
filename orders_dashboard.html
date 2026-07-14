@@ -52,6 +52,7 @@
     background: #f8d7da; color: #721c24; border: none;
     border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px;
   }
+  .remove-btn:disabled { background: #eee; color: #999; cursor: not-allowed; }
   .total-row {
     display: flex; justify-content: space-between; align-items: center;
     margin-top: 12px; padding-top: 10px; border-top: 2px solid #eee;
@@ -136,7 +137,8 @@ function renderCard(order) {
   const items = parseItems(order);
   orderItems[ref] = items;
  
-  const itemsHtml = items.map((it, idx) => renderItemRow(ref, it, idx)).join('');
+  const done = status === 'تمت الموافقة' || status === 'ملغي' || status === 'تم التوصيل';
+  const itemsHtml = items.map((it, idx) => renderItemRow(ref, it, idx, done)).join('');
   const total = items.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
   const deliveryFee = 10; // fixed delivery fee
  
@@ -159,7 +161,7 @@ function renderCard(order) {
   `;
 }
  
-function renderItemRow(ref, item, idx) {
+function renderItemRow(ref, item, idx, done) {
   const qty = Number(item.quantity) || 1;
   if (MODE === 'rep') {
     // rep enters a price per item
@@ -171,21 +173,22 @@ function renderItemRow(ref, item, idx) {
           oninput="onPriceInput('${ref}', ${idx}, this.value)">
       </div>`;
   } else {
-    // customer sees price, can remove the item
+    // customer sees price, can remove the item (unless already finalized)
     const lineTotal = (Number(item.price) || 0) * qty;
     return `
       <div class="item-row" id="item-${ref}-${idx}">
         <span class="item-name">${item.item} <span class="item-qty">×${qty}</span></span>
         <span class="item-price-display">${lineTotal} ريال</span>
-        <button class="remove-btn" onclick="removeItem('${ref}', ${idx})">حذف</button>
+        <button class="remove-btn" onclick="removeItem('${ref}', ${idx})" ${done ? 'disabled' : ''}>حذف</button>
       </div>`;
   }
 }
  
 function renderButtons(ref, status) {
   if (MODE === 'rep') {
+    const alreadySent = status !== 'قيد الانتظار';
     return `
-      <button class="action btn-save" onclick="savePrices('${ref}', this)">حفظ الأسعار وإرسالها للعميل</button>
+      <button class="action btn-save" onclick="savePrices('${ref}', this)" ${alreadySent ? 'disabled' : ''}>${alreadySent ? 'تم الإرسال ✓' : 'حفظ الأسعار وإرسالها للعميل'}</button>
       <button class="action btn-delivered" onclick="updateStatus('${ref}','تم التوصيل',this)"
         ${status === 'تم التوصيل' ? 'disabled' : ''}>تم التوصيل</button>`;
   } else {
@@ -258,3 +261,4 @@ if (MODE === 'rep') setInterval(load, 30000); // rep view auto-refreshes
  
 </body>
 </html>
+ 
