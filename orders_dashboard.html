@@ -128,10 +128,10 @@ function parseItems(order) {
  
 function renderCard(order) {
   const ref = order['رقم المرجع'] || '';
-  const status = (order['الحالة'] || 'pending').toLowerCase();
-  const statusClass = status === 'approved' ? 'approved'
-    : status === 'delivered' ? 'delivered'
-    : status === 'cancelled' ? 'cancelled' : '';
+  const status = order['الحالة'] || 'قيد الانتظار';
+  const statusClass = status === 'تمت الموافقة' ? 'approved'
+    : status === 'تم التوصيل' ? 'delivered'
+    : status === 'ملغي' ? 'cancelled' : '';
  
   const items = parseItems(order);
   orderItems[ref] = items;
@@ -144,7 +144,7 @@ function renderCard(order) {
     <div class="order-card" id="card-${ref}">
       <div class="order-header">
         <span class="order-ref">${ref}</span>
-        <span class="status-badge ${statusClass}">${order['الحالة'] || 'قيد الانتظار'}</span>
+        <span class="status-badge ${statusClass}">${status}</span>
       </div>
       <div class="order-detail"><b>الاسم:</b> ${order['الأسم'] ?? ''}</div>
       <div class="order-detail"><b>الهاتف:</b> ${order['رقم الهاتف'] ?? ''}</div>
@@ -186,13 +186,13 @@ function renderButtons(ref, status) {
   if (MODE === 'rep') {
     return `
       <button class="action btn-save" onclick="savePrices('${ref}', this)">حفظ الأسعار وإرسالها للعميل</button>
-      <button class="action btn-delivered" onclick="updateStatus('${ref}','Delivered',this)"
-        ${status === 'delivered' ? 'disabled' : ''}>تم التوصيل</button>`;
+      <button class="action btn-delivered" onclick="updateStatus('${ref}','تم التوصيل',this)"
+        ${status === 'تم التوصيل' ? 'disabled' : ''}>تم التوصيل</button>`;
   } else {
-    const done = status === 'approved' || status === 'cancelled' || status === 'delivered';
+    const done = status === 'تمت الموافقة' || status === 'ملغي' || status === 'تم التوصيل';
     return `
-      <button class="action btn-approve" onclick="updateStatus('${ref}','Approved',this)" ${done ? 'disabled' : ''}>موافقة</button>
-      <button class="action btn-cancel" onclick="updateStatus('${ref}','Cancelled',this)" ${done ? 'disabled' : ''}>إلغاء</button>`;
+      <button class="action btn-approve" onclick="updateStatus('${ref}','تمت الموافقة',this)" ${done ? 'disabled' : ''}>موافقة</button>
+      <button class="action btn-cancel" onclick="updateStatus('${ref}','ملغي',this)" ${done ? 'disabled' : ''}>إلغاء</button>`;
   }
 }
  
