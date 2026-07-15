@@ -94,6 +94,7 @@ const MODE = refId ? 'customer' : 'rep';   // ref present => customer view
  
 // keep working copies of each order's items in memory
 const orderItems = {};
+const orderPhones = {};
  
 async function load() {
   const loadingEl = document.getElementById('loading');
@@ -136,6 +137,7 @@ function renderCard(order) {
  
   const items = parseItems(order);
   orderItems[ref] = items;
+  orderPhones[ref] = order['رقم الهاتف'] ?? '';
  
   const done = status === 'تمت الموافقة' || status === 'ملغي' || status === 'تم التوصيل';
   const itemsHtml = items.map((it, idx) => renderItemRow(ref, it, idx, done)).join('');
@@ -230,7 +232,7 @@ async function savePrices(ref, btn) {
     await fetch(SAVE_PRICES_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ referenceNumber: ref, items: orderItems[ref] })
+      body: JSON.stringify({ referenceNumber: ref, items: orderItems[ref], phone: orderPhones[ref] })
     });
     btn.textContent = 'تم الإرسال ✓';
   } catch (err) {
@@ -261,4 +263,3 @@ if (MODE === 'rep') setInterval(load, 30000); // rep view auto-refreshes
  
 </body>
 </html>
- 
